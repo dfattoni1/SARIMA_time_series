@@ -1,56 +1,52 @@
-# Customer Segmentation: Unsupervised Learning
+# SARIMA Time Series Analysis
 
-**Creating customer segments for a subset of OkCUpid users based on their characteristics through an unsupervised machine learning model.**
+**Implementing a seasonal autoregressive integrated moving average (SARIMA) model to predict future production of beer.**
 
 ## Project overview
-Dating sites try to pair users to create the best potential matches, so having a way to determine whether two users are more likely to share certain characteristics or not is a great first step in developing better recommendation systems for consumers. With this in mind, the purpose of this project was to build clusters of people based on shared characteristics so as to get a better understanding of how the consumer base is distributed and how to start making recommendations on potential matches based on shared traits.
+Being able to make data-driven predictions on the expected behavior of the market is essential for companies. When working with time series, especially ones that exhibit strong seasonal patterns such as this one, it is extremely useful to have a tool to be able to get a sense of how the market Will behave looking forward taking past behavior as a reference point.
 
 ## The data
-The data for this Project was obtained through a publicly available Kaggle dataset on OkCupid profiles. The dataset can be accessed [here](https://www.kaggle.com/datasets/andrewmvd/okcupid-profiles). All the data is contained within a single file, profiles.zip (the data is compressed in order to meet GitHub's file size requirements), which can be found in the data folder of this project. The dataset includes 31 columns, though only 20 were used for the analysis.
+The data for this Project was obtained through a publicly available Kaggle dataset on beer production. The dataset can be accessed [here](https://www.kaggle.com/datasets/saadsikander/beer-production/data). All the data is contained within a single file, monthly-beer-production-in-austr.csv, which can be found in the data folder of this project. The dataset included 2 columns:
+
+| Feature | Description | Data type |
+|:--- | :--- | :--- |
+| Month	 | Month of the year | String |
+| Monthly Beer Production | Beer production for that month | Float |
 
 ## Project development
-This section will explain the process of data preprocessing, model selection, and hyperparameter tuning. Also, key insights relating to the findings of the analysis will be included.
+In order to build the SARIMA model, it's necessary to first determine whether the data is stationary, as this is one of the key assumptions of the model). Then, the order of the parameters must be determined. These two processes Will be discussed in this section.
 
-### Data preprocessing
-Despite the dataset containing 31 columns originally, some of them were discarded from the analysis due to either extremely high cardinality making the interpretation of the results unviable or simply due to practically non-existent variability. Also, most of the columns in the dataset were categorical, which also presented an additional challenge in terms of preprocessing and encoding. Certain columns also contained multiple pieces of information at once, which made it necessary to split them into more than one column. Below are some examples of this:
+### Checking for stationarity
+The data was found to not be stationary. This was confirmed both visually and statistically. The visual approach entailed plotting the data, as well as the rolling mean and rolling standard deviation to see if they remained constant over time. Figure 1 below shows the rolling mean and standard deviation with a window of 12.
 
-| Feature | Example row | Split into |
-| :--- | :--- | :--- |
-| diet | strictly vegetarian | diet_strictness and diet_type |
-| offspring |  don't have kids, but wants them | has_kids and wants_kids |
-| religion | agnosticism and very serious about it | religion_type and religion_importance |
+![Rolling mean and rolling standard deviation (window = 12)](images/rolling_mean_std.png)
 
-Lastly, in features in which there were missing values, imputation was carried out as long as it was sensible to do so. Features such as income in which more than 50% of users decided not to disclose it, performing any type of imputation could result in extremely misleading results, so the feature was simply recoded to show whether the user disclosed their income or not. In other situations such as with age, other features could be used to estimate what the missing values could be. For instance, it was possible to leverage the fact that we know a user is a smoker, lives in California, and is enrolled in a master's degree program to get an estimation of how old they are. If they're smokers in California, they must be at least 21 years old. Also, knowing they're a master's student, it's possible to get the average age of other users who are also enrolled in a master's degree and impute the missing value.
+*Figure 1: Rolling mean and rolling standard deviation showing the data is not stationary.*
 
-### Model selection and hyperparameter tuning
-The 20 features included were a mix of primarily categorical and also some quantitate variables, so a K-Prototypes Clustering algorithm was chosen for the customer segmentation, as this allows for clustering without having to give up categorical or quantitative variables. Using the cost as a metric, it was possible to determine that 4 clusters was the most appropriate amount to segregate users using the elbow method. This was later corroborated visually by plotting the cost at different values of K.
+This was further corrborated using the ADF and KPSS tests. The results of both of these tests suggested that the data was not stationary even at an alpha value of 0.01. Knowing this, the data was made stationary by applying a log transformation to the data in order to address the non-constant variance and then applying differencing to account for non-stationarity in terms of trend.
 
-![Cost at different values of K](images/cost_by_k.png)
+### Determining the orders of the parameters
+Having made the data stationary, the ACF and PACF plots of the now stationary data was checked to determine the order of both seasonal and non-seasonal parameters. After the visual inspection, it was determined that the best model was a SARIMA(2, 1, 1)(1, 0, 1, 12). All model parameters were found to be statistically significant, and, in order to check that the residuals were independent, the Ljung-Box test was conducted. The residuals were found to have no correlation.
 
-*Figure 1: Cost at different values of K showing 4 is where it starts dropping more gradually.*
+![Ljung-Box test on the model's residuals](images/lb_test.png)
 
-Having found the optimal number of clusters, gamma was tuned to account for the imbalance in categorical and quantitative features. With the full model, 4 distinct clusters were identified and the characteristics that made them stand out from the rest were highlighted.
+*Figure 2: Ljung-Box test on the model's residuals and squared residuals showing they're not correlated at an alpha of 0.05<sup>[1](#footnote1)</sup>.*
 
-### Key insights
-Four clusters were identified:
+<a name = "footnote1">1</a>: The p-value at lag 10 (the minimum value in the entire series) is of 0.0538, meaning that, while close to the threshold, is not enough to reject the null hypothesis of the test.
 
-_**The private neutrals:**_
-Represent the majority of the user base. They prefer not to disclose too much information about themselves.
+In order to corroborate the parameter orders found visually, a grid search was conducted to test for multiple combinations of parameters. The AIC value was used as a metric to find the best model. According to the grid search, the best model was a SARIMA(4, 1, 3)(1, 0, 2, 12). This was, however, rejected in favor of the first model due to two main reasons:
+- The model is more complex, and, according to the principle of parsimony, if the same results can be achieved with a simpler model, the simpler model is preferred.
+- The test MSE was later found to be higher for the grid search model, which suggests that it was overfitting the data.
 
-_**The casual urbanites:**_
-They have an average body type, eat anything, work in Business/Finance, and have a casual relationship with beliefs.
+Below is Figure 3 showcasing the visual validation of the final model.
 
-_**The compassionate educators:**_
-the unique female majority and their professional focus on Health and Education. "Compassionate" leans into the dog-lover and "helper" industry traits.
+![Visual validation of the final model](images/visual_validation.png)
 
-_**The mature traditionalists:**_
-They are the oldest group, have a religious affiliation (Catholic), and a established career path. They are a niche but highly defined demographic.
+*Figure 3: Visual validation of the final model. Predicted data against actual data.*
 
-The full analysis, including the evaluation of the model, can be found [here](date-a-scientist.ipynb).
+The full analysis, including the evaluation of the model, can be found [here](sarima_analysis.ipynb).
 
 ## How to explore this repository
-**Analysis:** View the full the analysis in the [Jupyter Notebook](date-a-scientist.ipynb) for full EDA and modelling.
-
-**Utilities:** Custom functions for plotting are in [util.py](util.py).
+**Analysis:** View the full the analysis in the [Jupyter Notebook](sarima-analysis.ipynb) for full EDA and modelling.
 
 **Reproduction:** Run `pip install -r requirements.txt` to set up the environment.
